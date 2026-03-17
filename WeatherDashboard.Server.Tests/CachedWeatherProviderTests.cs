@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using System.Text;
 using System.Text.Json;
@@ -14,11 +15,12 @@ public class CachedWeatherProviderTests
 {
     private readonly Mock<IWeatherProvider> _inner = new Mock<IWeatherProvider>();
     private readonly Mock<IDistributedCache> _cache = new Mock<IDistributedCache>();
+    private readonly Mock<IOptions<WeatherCacheOptions>> _options = new Mock<IOptions<WeatherCacheOptions>>();
     private readonly CachedWeatherProvider _sut;
 
     public CachedWeatherProviderTests()
     {
-        _sut = new CachedWeatherProvider(_inner.Object, _cache.Object, NullLogger<CachedWeatherProvider>.Instance);
+        _sut = new CachedWeatherProvider(_inner.Object, _cache.Object, _options.Object, NullLogger<CachedWeatherProvider>.Instance);
     }
 
     [Fact]
