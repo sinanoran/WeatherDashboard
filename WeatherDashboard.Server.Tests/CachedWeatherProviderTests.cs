@@ -20,6 +20,10 @@ public class CachedWeatherProviderTests
 
     public CachedWeatherProviderTests()
     {
+        _options
+            .Setup(options => options.Value)
+            .Returns(new WeatherCacheOptions { ExpirationMinutes = 10 });
+
         _sut = new CachedWeatherProvider(_inner.Object, _cache.Object, _options.Object, NullLogger<CachedWeatherProvider>.Instance);
     }
 

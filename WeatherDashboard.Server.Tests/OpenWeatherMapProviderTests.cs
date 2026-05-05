@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
@@ -175,11 +176,10 @@ public class OpenWeatherMapProviderTests : IDisposable
         await sut.GetWeatherAsync("New York");
 
         Assert.Equal(1, _handler.CallCount);
-        Assert.NotNull(_handler.RequestUris[0]);
-        string geocodingUrl = _handler.RequestUris[0]!.AbsoluteUri;
-        Assert.Contains("geo/1.0/direct", geocodingUrl);
-        Assert.Contains("q=New%20York", geocodingUrl);
-        Assert.Contains("appid=test-key", geocodingUrl);
+        AssertRequestPath(_handler.RequestUris[0], "/geo/1.0/direct");
+        AssertQueryParameter(_handler.RequestUris[0], "q", "New York");
+        AssertQueryParameter(_handler.RequestUris[0], "limit", "1");
+        AssertQueryParameter(_handler.RequestUris[0], "appid", "test-key");
     }
 
     [Fact]
@@ -207,12 +207,11 @@ public class OpenWeatherMapProviderTests : IDisposable
         await sut.GetWeatherAsync("Berlin");
 
         Assert.Equal(2, _handler.CallCount);
-        Assert.NotNull(_handler.RequestUris[1]);
-        string weatherUrl = _handler.RequestUris[1]!.AbsoluteUri;
-        Assert.Contains("data/2.5/weather", weatherUrl);
-        Assert.Contains("lat=52.52", weatherUrl);
-        Assert.Contains("lon=13.405", weatherUrl);
-        Assert.Contains("units=metric", weatherUrl);
+        AssertRequestPath(_handler.RequestUris[1], "/data/2.5/weather");
+        AssertQueryParameter(_handler.RequestUris[1], "lat", 52.52d);
+        AssertQueryParameter(_handler.RequestUris[1], "lon", 13.405d);
+        AssertQueryParameter(_handler.RequestUris[1], "units", "metric");
+        AssertQueryParameter(_handler.RequestUris[1], "appid", "test-key");
     }
 
     [Fact]
@@ -250,6 +249,70 @@ public class OpenWeatherMapProviderTests : IDisposable
         {
             Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json")
         };
+    }
+
+    private static void AssertRequestPath(Uri? requestUri, string expectedPath)
+    {
+        Assert.NotNull(requestUri);
+        Assert.Equal(expectedPath, requestUri!.AbsolutePath);
+    }
+
+    private static void AssertQueryParameter(Uri? requestUri, string key, string expectedValue)
+    {
+        string actualValue = GetQueryParameter(requestUri, key);
+
+        Assert.Equal(expectedValue, actualValue);
+    }
+
+    private static void AssertQueryParameter(Uri? requestUri, string key, double expectedValue)
+    {
+        string actualValue = GetQueryParameter(requestUri, key);
+        bool wasParsed = double.TryParse(
+            actualValue,
+            NumberStyles.Float | NumberStyles.AllowThousands,
+            CultureInfo.InvariantCulture,
+            out double parsedValue);
+
+        Assert.True(wasParsed, $"Expected query parameter '{key}' to be a valid number, but got '{actualValue}'.");
+        Assert.Equal(expectedValue, parsedValue, 6);
+    }
+
+    private static string GetQueryParameter(Uri? requestUri, string key)
+    {
+        Assert.NotNull(requestUri);
+
+        Dictionary<string, string> queryParameters = ParseQueryParameters(requestUri!);
+        bool exists = queryParameters.TryGetValue(key, out string? value);
+
+        Assert.True(exists, $"Expected query parameter '{key}' was not present.");
+        Assert.NotNull(value);
+        return value!;
+    }
+
+    private static Dictionary<string, string> ParseQueryParameters(Uri requestUri)
+    {
+        Dictionary<string, string> parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string query = requestUri.Query.TrimStart('?');
+
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return parameters;
+        }
+
+        string[] pairs = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (string pair in pairs)
+        {
+            string[] parts = pair.Split('=', 2, StringSplitOptions.None);
+            string name = Uri.UnescapeDataString(parts[0]);
+            string value = parts.Length > 1
+                ? Uri.UnescapeDataString(parts[1].Replace("+", " ", StringComparison.Ordinal))
+                : string.Empty;
+
+            parameters[name] = value;
+        }
+
+        return parameters;
     }
 
     private OpenWeatherMapProvider CreateProvider(IConfiguration configuration) =>
